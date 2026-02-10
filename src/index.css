@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+@layer utilities{
+    .animate-in-from-bottom{
+        animation-name: animatefrombottom;
+    }
+        .animate-in-from-top{
+        animation-name: animatefromtop;
+    }
+    .duration-1000{
+        animation-duration: 1500ms;
+    }
+
+    .delay-200{
+        animation-delay: 200ms;
+    }
+    .text-algerian{
+        font-family : 'Comic sans Ms';
+    }
+}
+
+@keyframes animatefrombottom{
+    from{
+        transform: translateY(10rem);
+    }
+    to{
+        transform: translateY(0);
+    }
+}
+
+@keyframes animatefromtop{
+    from{
+        transform: translateY(-10rem);
+    }
+    to{
+        transform: translateY(0);
+    }
+}
