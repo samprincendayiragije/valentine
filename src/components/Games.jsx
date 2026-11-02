@@ -11,7 +11,7 @@ const Btn = ({ tone = 'solid', className = '', ...p }) => (
 const AUDIENCE = { you: 'For you', partner: 'For your partner', both: 'For both of you' }
 const TO_LABEL = { drawer: 'Whoever draws it', other: 'The other person', both: 'Both of you' }
 
-function Gate({ onAccept }) {
+export function Gate({ onAccept }) {
   return (
     <div className="p-4">
       <div className="mx-auto max-w-md rounded-2xl border border-pink-500/30 bg-purple-950/30 p-6">

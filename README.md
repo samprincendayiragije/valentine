@@ -46,6 +46,13 @@ Games are for two adults and are opt-in (an 18+ and consent screen comes first).
 suggestive; anything beyond that is for you to write in *Games -> Create a deck*. Decks live only on your phones and
 travel as encrypted messages. Any card can be passed.
 
+## Reels
+
+The **Reels** tab is a swipe-up feed of videos you share with each other: paste a YouTube, Vimeo or single Facebook
+reel link (or a direct .mp4 from a site in `DIRECT_HOSTS` in `src/lib/embed.js`), pick a tag, and it appears for both
+of you. To allow another video-file site, add it to `DIRECT_HOSTS` and to `media-src` in `index.html` and
+`vite.config.js`; `npm test` checks they match.
+
 ## Develop
 
 ```bash

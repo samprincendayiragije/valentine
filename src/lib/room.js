@@ -338,6 +338,7 @@ export function useRoom() {
 
   const sendDeck = useCallback((deck) => sendFields({ kind: 'deck', deck }), [sendFields])
   const sendPlay = useCallback((play) => sendFields({ kind: 'play', play }), [sendFields])
+  const sendWatch = useCallback((watch) => sendFields({ kind: 'watch', watch }), [sendFields])
   const getMedia = useCallback((m) => loadMedia(c.current.meta.roomId, m.id, m.media.mime), [])
 
   const retry = useCallback((id) => {
@@ -361,5 +362,5 @@ export function useRoom() {
   }, [])
 
   return { phase, error, busy, code, safety, verified, keyChanged, closedReason, messages, online,
-    create, join, markVerified, send, sendMedia, sendDeck, sendPlay, getMedia, retry, reset }
+    create, join, markVerified, send, sendMedia, sendDeck, sendPlay, sendWatch, getMedia, retry, reset }
 }

@@ -1,6 +1,7 @@
 // What goes inside an encrypted message. The server only ever sees the ciphertext of this.
 // Everything received from the other phone is validated here before the app uses it.
 import { cleanDeck, cleanPlay } from './games.js'
+import { cleanWatch } from './embed.js'
 
 export const MAX_LEN = 2000
 export const MAX_MEDIA_BYTES = 20 * 1024 * 1024
@@ -19,6 +20,7 @@ export function encodePayload(msg) {
     case 'media': return { k: 'media', ts: msg.ts, t: msg.text || '', m: msg.media }
     case 'deck': return { k: 'deck', ts: msg.ts, d: msg.deck }
     case 'play': return { k: 'play', ts: msg.ts, p: msg.play }
+    case 'watch': return { k: 'watch', ts: msg.ts, w: { url: msg.watch.url, tag: msg.watch.tag } }
     default: return { t: msg.text, ts: msg.ts }
   }
 }
@@ -37,5 +39,6 @@ export function decodePayload(p, fallbackTs) {
   }
   if (p.k === 'deck') return { kind: 'deck', ts, deck: cleanDeck(p.d) }
   if (p.k === 'play') return { kind: 'play', ts, play: cleanPlay(p.p) }
+  if (p.k === 'watch') return { kind: 'watch', ts, watch: cleanWatch(p.w) }
   return { kind: 'unsupported', ts }
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, CheckCheck, Eye, Image as ImageIcon, Mic, Send, Square, TriangleAlert, X, Layers, Dices } from 'lucide-react'
+import { Check, CheckCheck, Clapperboard, Eye, Image as ImageIcon, Mic, Send, Square, TriangleAlert, X, Layers, Dices } from 'lucide-react'
 import { MAX_LEN, MAX_AUDIO_SECS } from '../lib/wire.js'
 import { prepareImage, pickRecorderMime } from '../lib/media.js'
 
@@ -45,7 +45,7 @@ function MediaBody({ m, getMedia }) {
   )
 }
 
-function Body({ m, getMedia, savedIds, onSaveDeck }) {
+function Body({ m, getMedia, savedIds, onSaveDeck, onWatch }) {
   if (m.undecryptable) return <p className="flex items-center gap-1 text-sm italic text-amber-300"><TriangleAlert size={14} /> Could not decrypt this message</p>
   if (m.kind === 'unsupported') return <p className="text-sm italic text-amber-300">This message needs a newer version of the app.</p>
   if (m.kind === 'media') {
@@ -53,6 +53,15 @@ function Body({ m, getMedia, savedIds, onSaveDeck }) {
       <div className="space-y-1">
         <MediaBody m={m} getMedia={getMedia} />
         {m.text && <p className="whitespace-pre-wrap break-words">{m.text}</p>}
+      </div>
+    )
+  }
+  if (m.kind === 'watch') {
+    return (
+      <div className="min-w-48">
+        <p className="flex items-center gap-1 text-sm font-semibold"><Clapperboard size={14} /> Shared a video</p>
+        <p className="text-xs capitalize text-white/70">{m.watch.provider} · {m.watch.tag}</p>
+        <button onClick={onWatch} className="mt-2 rounded-full bg-white/15 px-3 py-1 text-xs hover:bg-white/25">Watch in Reels</button>
       </div>
     )
   }
@@ -74,7 +83,7 @@ function Body({ m, getMedia, savedIds, onSaveDeck }) {
   return <p className="whitespace-pre-wrap break-words">{m.text}</p>
 }
 
-function Bubble({ m, onRetry, getMedia, savedIds, onSaveDeck }) {
+function Bubble({ m, onRetry, getMedia, savedIds, onSaveDeck, onWatch }) {
   const mine = m.from === 'me'
   if (m.kind === 'play') {
     if (m.play.op !== 'start' && m.play.op !== 'end') return null
@@ -87,7 +96,7 @@ function Bubble({ m, onRetry, getMedia, savedIds, onSaveDeck }) {
   return (
     <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-[80%] rounded-2xl px-3 py-2 ${mine ? 'bg-purple-700 rounded-br-sm' : 'bg-slate-800 rounded-bl-sm'}`}>
-        <Body m={m} getMedia={getMedia} savedIds={savedIds} onSaveDeck={onSaveDeck} />
+        <Body m={m} getMedia={getMedia} savedIds={savedIds} onSaveDeck={onSaveDeck} onWatch={onWatch} />
         <div className="mt-0.5 flex items-center justify-end gap-1 text-[11px] text-white/60">
           <span>{time(m.ts)}</span>
           {mine && !m.failed && (m.delivered ? <CheckCheck size={14} aria-label="Delivered" /> : <Check size={14} aria-label="Sent" />)}
@@ -157,7 +166,7 @@ function Recorder({ onSend, onCancel }) {
   )
 }
 
-export default function Chat({ messages, onSend, onSendMedia, onRetry, getMedia, savedIds, onSaveDeck, disabled, online }) {
+export default function Chat({ messages, onSend, onSendMedia, onRetry, getMedia, savedIds, onSaveDeck, onWatch, disabled, online }) {
   const [text, setText] = useState('')
   const [recording, setRecording] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -201,7 +210,7 @@ export default function Chat({ messages, onSend, onSendMedia, onRetry, getMedia,
             Messages, photos, videos and voice notes are encrypted on your phone before they leave it. Say hi.
           </p>
         )}
-        {messages.map((m) => <Bubble key={m.id} m={m} onRetry={onRetry} getMedia={getMedia} savedIds={savedIds} onSaveDeck={onSaveDeck} />)}
+        {messages.map((m) => <Bubble key={m.id} m={m} onRetry={onRetry} getMedia={getMedia} savedIds={savedIds} onSaveDeck={onSaveDeck} onWatch={onWatch} />)}
         <div ref={end} />
       </div>
       <div className="border-t border-white/10 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
