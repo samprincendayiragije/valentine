@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local env (the Supabase URL/anon key go in .env.local, never commit real secrets)
+.env
+.env.*
+!.env.example
