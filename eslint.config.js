@@ -26,4 +26,9 @@ export default defineConfig([
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
     },
   },
+  {
+    // Node-side files: tests and build config
+    files: ['test/**/*.js', 'vite.config.js'],
+    languageOptions: { globals: { ...globals.node } },
+  },
 ])

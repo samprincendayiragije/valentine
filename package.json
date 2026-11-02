@@ -1,5 +1,5 @@
 {
-  "name": "tailwind",
+  "name": "valentine",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -7,11 +7,16 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test \"test/*.test.js\"",
+    "test:sql": "bash scripts/test-sql.sh",
+    "audit:prod": "npm audit --omit=dev"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.118.0",
     "@tailwindcss/vite": "^4.1.14",
     "lucide-react": "^0.563.0",
+    "qrcode-generator": "^2.0.4",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "tailwindcss": "^4.1.14"
