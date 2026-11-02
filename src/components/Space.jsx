@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
-import { ArrowLeft, Check, Copy, Lock, ShieldCheck, ShieldAlert, Trash2, TriangleAlert } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { ArrowLeft, Check, Copy, Flame, Lock, MessageCircle, ShieldCheck, ShieldAlert, Trash2, TriangleAlert } from 'lucide-react'
 import { useRoom } from '../lib/room.js'
 import Chat from './Chat.jsx'
+import Games from './Games.jsx'
+import { useDecks } from '../lib/decks.js'
 import Qr from './Qr.jsx'
 import SafetyCode, { MismatchWarning } from './SafetyCode.jsx'
 import InstallButton from './InstallButton.jsx'
@@ -84,6 +86,9 @@ function Closed({ room, onReset }) {
 
 export default function Space({ onExit, install }) {
   const room = useRoom()
+  const decksApi = useDecks()
+  const [tab, setTab] = useState('chat')
+  const savedIds = useMemo(() => new Set(decksApi.decks.map((d) => d.id)), [decksApi.decks])
   const [showSafety, setShowSafety] = useState(false)
   const [mismatch, setMismatch] = useState(false)
   const [skipped, setSkipped] = useState(false)
@@ -118,7 +123,22 @@ export default function Space({ onExit, install }) {
           </div>
         )}
         {!room.verified && <button onClick={() => setShowSafety(true)} className="bg-amber-900/60 px-4 py-2 text-left text-sm">Safety code not compared yet. Tap to compare.</button>}
-        <Chat messages={room.messages} onSend={room.send} onRetry={room.retry} disabled={room.keyChanged} online={room.online} />
+        <nav className="grid grid-cols-2 border-b border-white/10 text-sm" aria-label="Sections">
+          {[['chat', 'Chat', <MessageCircle size={15} key="c" />], ['games', 'Games', <Flame size={15} key="g" />]].map(([id, label, icon]) => (
+            <button key={id} onClick={() => setTab(id)} aria-current={tab === id ? 'page' : undefined}
+              className={`flex items-center justify-center gap-1.5 py-2 ${tab === id ? 'border-b-2 border-pink-400 text-white' : 'text-slate-400'}`}>
+              {icon} {label}
+            </button>
+          ))}
+        </nav>
+        <div className={tab === 'chat' ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}>
+          <Chat messages={room.messages} onSend={room.send} onSendMedia={room.sendMedia} onRetry={room.retry} getMedia={room.getMedia}
+            savedIds={savedIds} onSaveDeck={decksApi.saveDeck} disabled={room.keyChanged} online={room.online} />
+        </div>
+        {tab === 'games' && (
+          <Games messages={room.messages} decksApi={decksApi} sendPlay={room.sendPlay} sendDeck={room.sendDeck}
+            onGoChat={() => setTab('chat')} disabled={room.keyChanged} />
+        )}
       </>
     )
 

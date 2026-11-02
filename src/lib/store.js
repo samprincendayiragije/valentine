@@ -1,18 +1,20 @@
 // Device-local storage (IndexedDB). Holds the non-extractable CryptoKeys (structured-cloned,
 // so the key material itself is never readable by JS) and this device's message history,
 // which is encrypted at rest with a separate non-extractable AES key.
-import { encrypt, decrypt, generateLocalKey, messageAad } from './crypto.js'
+import { encrypt, decrypt, encryptBytes, decryptBytes, generateLocalKey, messageAad } from './crypto.js'
 
 const DB_NAME = 'valentine'
-const DB_VERSION = 1
+const DB_VERSION = 2
 
 let dbPromise
 function db() {
   dbPromise ??= new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION)
     req.onupgradeneeded = () => {
-      req.result.createObjectStore('kv')
-      req.result.createObjectStore('msgs', { keyPath: 'id' })
+      const d = req.result
+      if (!d.objectStoreNames.contains('kv')) d.createObjectStore('kv')
+      if (!d.objectStoreNames.contains('msgs')) d.createObjectStore('msgs', { keyPath: 'id' })
+      if (!d.objectStoreNames.contains('media')) d.createObjectStore('media', { keyPath: 'id' })
     }
     req.onsuccess = () => resolve(req.result)
     req.onerror = () => reject(req.error)
@@ -81,4 +83,32 @@ export async function loadMessages(roomId) {
     }
   }
   return out.sort((a, b) => a.ts - b.ts)
+}
+
+// Photos, videos and voice notes, encrypted at rest with the same local key.
+export async function saveMedia(roomId, id, bytes) {
+  const key = await localKey()
+  const data = await encryptBytes(key, bytes, messageAad('local-media', roomId, id))
+  await run('media', 'readwrite', (s) => s.put({ id, roomId, data }))
+}
+
+export async function loadMedia(roomId, id, mime) {
+  const row = await run('media', 'readonly', (s) => s.get(id))
+  if (!row || row.roomId !== roomId) return null
+  try {
+    const bytes = await decryptBytes(await localKey(), row.data, messageAad('local-media', roomId, id))
+    return new Blob([bytes], { type: mime })
+  } catch { return null }
+}
+
+// Small encrypted-at-rest values (your own decks).
+export async function secretGet(name) {
+  const row = await kvGet(`secret:${name}`)
+  if (!row) return null
+  try { return JSON.parse(await decrypt(await localKey(), row.ciphertext, row.nonce, messageAad('local-kv', name, name))) } catch { return null }
+}
+
+export async function secretSet(name, value) {
+  const { ciphertext, nonce } = await encrypt(await localKey(), JSON.stringify(value), messageAad('local-kv', name, name))
+  await kvSet(`secret:${name}`, { ciphertext, nonce })
 }

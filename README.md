@@ -34,6 +34,18 @@ Read [SECURITY.md](SECURITY.md) first: it says plainly what is and is not protec
 7. Phone A: *Our private space -> Create room*. Phone B: *Join room* and type the code. Compare the safety code
    in person or on a call and tap *They match*.
 
+## Photos, videos, voice notes and games
+
+Text and the **Games** tab work with just `schema.sql`. To send photos, videos and voice notes, also paste
+`supabase/media.sql` into the SQL Editor and run it once. It creates a private storage bucket that only the two
+people in a room can use. Files are encrypted on the sender's phone before upload (AES-256-GCM, same room key as
+messages), deleted from the server when the other phone has saved them, and swept after 7 days. Limit: 20 MB per
+file, voice notes up to 3 minutes. Photos are re-drawn before sending, which strips location data.
+
+Games are for two adults and are opt-in (an 18+ and consent screen comes first). Built-in decks go from sweet to
+suggestive; anything beyond that is for you to write in *Games -> Create a deck*. Decks live only on your phones and
+travel as encrypted messages. Any card can be passed.
+
 ## Develop
 
 ```bash

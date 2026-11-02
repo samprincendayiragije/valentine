@@ -133,3 +133,24 @@ export async function hashPairingCode(input) {
   const digest = await subtle.digest('SHA-256', enc.encode(`${PROTOCOL}|code|${normalisePairingCode(input)}`))
   return toHex(digest)
 }
+
+// ---------- files (photos, videos, voice notes) ----------
+// A file is encrypted as one AES-GCM blob stored as: 12-byte nonce || ciphertext+tag.
+// The AAD binds it to this room, sender and message id, like text messages.
+export const mediaAad = (roomId, senderId, mediaId) => enc.encode(`${PROTOCOL}|media|${roomId}|${senderId}|${mediaId}`)
+
+export async function encryptBytes(key, bytes, aad) {
+  const nonce = globalThis.crypto.getRandomValues(new Uint8Array(12))
+  const ct = new Uint8Array(await subtle.encrypt({ name: 'AES-GCM', iv: nonce, additionalData: aad, tagLength: 128 }, key, bytes))
+  const out = new Uint8Array(12 + ct.length)
+  out.set(nonce, 0)
+  out.set(ct, 12)
+  return out
+}
+
+export async function decryptBytes(key, data, aad) {
+  if (data.length < 12 + 16) throw new Error('Too short')
+  const pt = await subtle.decrypt(
+    { name: 'AES-GCM', iv: data.slice(0, 12), additionalData: aad, tagLength: 128 }, key, data.slice(12))
+  return new Uint8Array(pt)
+}

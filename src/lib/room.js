@@ -2,13 +2,43 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase, isConfigured, ensureUser } from './supabase.js'
 import {
   generateDeviceKeyPair, deriveSharedKey, encrypt, decrypt, messageAad, safetyCode,
-  generatePairingCode, hashPairingCode, isValidPairingCode,
+  generatePairingCode, hashPairingCode, isValidPairingCode, encryptBytes, decryptBytes, mediaAad,
 } from './crypto.js'
-import { kvGet, kvSet, kvDel, wipeDevice, saveMessage, hasMessage, loadMessages } from './store.js'
+import { kvGet, kvSet, kvDel, wipeDevice, saveMessage, hasMessage, loadMessages, saveMedia, loadMedia } from './store.js'
+import { MAX_LEN, MAX_MEDIA_BYTES, baseMime, encodePayload, decodePayload } from './wire.js'
 
-export const MAX_LEN = 2000
+export { MAX_LEN }
+const BUCKET = 'valentine-media'
+const WEEK_MS = 7 * 24 * 3600 * 1000
 const POLL_WAITING_MS = 3000
 const POLL_PAIRED_MS = 8000
+
+// Downloads, decrypts and stores an incoming file. 'ok' | 'retry' | 'missing' | 'bad'
+async function fetchMedia(x, row, msg) {
+  const { meta, sharedKey } = x
+  const { data, error } = await supabase.storage.from(BUCKET).download(`${meta.roomId}/${row.id}`)
+  if (error || !data) {
+    const gone = error?.status === 404 || /not found|404/i.test(error?.message ?? '')
+    return gone ? 'missing' : 'retry'
+  }
+  try {
+    const bytes = await decryptBytes(sharedKey, new Uint8Array(await data.arrayBuffer()), mediaAad(meta.roomId, row.sender_id, row.id))
+    if (bytes.length !== msg.media.size) return 'bad'
+    await saveMedia(meta.roomId, row.id, bytes)
+    return 'ok'
+  } catch {
+    return 'bad'
+  }
+}
+
+// Removes files left on the server for more than 7 days, or all of them when closing the room.
+async function cleanServerMedia(roomId, { all = false } = {}) {
+  try {
+    const { data } = await supabase.storage.from(BUCKET).list(roomId, { limit: 100 })
+    const old = (data ?? []).filter((o) => all || Date.now() - Date.parse(o.created_at) > WEEK_MS).map((o) => `${roomId}/${o.name}`)
+    if (old.length) await supabase.storage.from(BUCKET).remove(old)
+  } catch { /* best effort */ }
+}
 
 // Phases: loading | unconfigured | setup | waiting | paired | closed
 export function useRoom() {
@@ -24,7 +54,7 @@ export function useRoom() {
   const [online, setOnline] = useState(navigator.onLine)
 
   // Everything mutable and non-visual lives here (never rendered, never sent anywhere).
-  const c = useRef({ seen: new Set(), sending: new Set(), msgs: [], channel: null, ticking: false })
+  const c = useRef({ seen: new Set(), inflight: new Set(), sending: new Set(), msgs: [], channel: null, ticking: false })
 
   const setMsgs = useCallback((updater) => {
     c.current.msgs = updater(c.current.msgs).slice().sort((a, b) => a.ts - b.ts)
@@ -37,30 +67,48 @@ export function useRoom() {
 
   // ----- receiving -----
   const processIncoming = useCallback(async (rows) => {
-    const { meta, sharedKey } = c.current
+    const x = c.current
+    const { meta, sharedKey } = x
     if (!sharedKey) return
     const ackIds = []
+    const mediaPaths = []
     for (const row of rows) {
       if (row.sender_id === meta.userId) continue
-      if (c.current.seen.has(row.id) || (await hasMessage(row.id))) { ackIds.push(row.id); continue }
-      c.current.seen.add(row.id)
-      let msg
+      if (x.inflight.has(row.id)) continue            // already being handled (realtime + poll can overlap)
+      x.inflight.add(row.id)
       try {
-        const plain = await decrypt(sharedKey, row.ciphertext, row.nonce, messageAad(meta.roomId, row.sender_id, row.id))
-        const p = JSON.parse(plain)
-        msg = {
-          id: row.id, from: 'peer', text: String(p.t).slice(0, MAX_LEN),
-          ts: Math.min(Number(p.ts) || Date.parse(row.created_at), Date.now() + 60000), delivered: true,
+        const path = `${meta.roomId}/${row.id}`
+        if (x.seen.has(row.id) || (await hasMessage(row.id))) {
+          ackIds.push(row.id)
+          if (x.msgs.find((m) => m.id === row.id)?.kind === 'media') mediaPaths.push(path)
+          continue
         }
-      } catch {
-        // Wrong key, tampering or corruption. Keep a visible marker rather than hiding it.
-        msg = { id: row.id, from: 'peer', text: '', ts: Date.parse(row.created_at), delivered: true, undecryptable: true }
+        let msg
+        try {
+          const plain = await decrypt(sharedKey, row.ciphertext, row.nonce, messageAad(meta.roomId, row.sender_id, row.id))
+          const fields = decodePayload(JSON.parse(plain), Date.parse(row.created_at))
+          msg = { id: row.id, from: 'peer', delivered: true, ...fields }
+        } catch {
+          // Wrong key, tampering or corruption. Keep a visible marker rather than hiding it.
+          msg = { id: row.id, from: 'peer', kind: 'text', text: '', ts: Date.parse(row.created_at), delivered: true, undecryptable: true }
+        }
+        if (msg.kind === 'media') {
+          const got = await fetchMedia(x, row, msg)
+          if (got === 'retry') continue                 // offline or not uploaded yet: try again next time, do not acknowledge
+          if (got === 'missing') msg.mediaMissing = true
+          if (got === 'bad') msg = { id: row.id, from: 'peer', kind: 'text', text: '', ts: msg.ts, delivered: true, undecryptable: true }
+          if (msg.kind === 'media') mediaPaths.push(path)
+        }
+        await saveMessage(meta.roomId, msg)             // stored on this device BEFORE we tell the server to delete
+        x.seen.add(row.id)
+        upsert(msg)
+        ackIds.push(row.id)
+      } finally {
+        x.inflight.delete(row.id)
       }
-      await saveMessage(meta.roomId, msg)   // stored on this device BEFORE we tell the server to delete
-      upsert(msg)
-      ackIds.push(row.id)
     }
     if (ackIds.length) await supabase.rpc('ack_messages', { p_ids: ackIds })
+    if (mediaPaths.length) { try { await supabase.storage.from(BUCKET).remove(mediaPaths) } catch { /* swept after 7 days */ } }
   }, [upsert])
 
   const refreshDelivery = useCallback(async () => {
@@ -94,6 +142,7 @@ export function useRoom() {
     setMsgs(() => history)
     setCode('')
     setPhase('paired')
+    cleanServerMedia(meta.roomId)
   }, [setMsgs])
 
   const tick = useCallback(async () => {
@@ -232,8 +281,16 @@ export function useRoom() {
     const { meta, sharedKey } = c.current
     c.current.sending.add(msg.id)
     try {
+      if (msg.kind === 'media') {
+        const blob = await loadMedia(meta.roomId, msg.id, msg.media.mime)
+        if (!blob) throw new Error('file missing on this device')
+        const sealed = await encryptBytes(sharedKey, new Uint8Array(await blob.arrayBuffer()), mediaAad(meta.roomId, meta.userId, msg.id))
+        const { error: ue } = await supabase.storage.from(BUCKET).upload(`${meta.roomId}/${msg.id}`, sealed, { contentType: 'application/octet-stream' })
+        // "already exists" = an earlier attempt got the file up but not the message; the file is self-contained, so carry on
+        if (ue && !/already exists|duplicate/i.test(ue.message ?? '')) throw ue
+      }
       const { ciphertext, nonce } = await encrypt(
-        sharedKey, JSON.stringify({ t: msg.text, ts: msg.ts }), messageAad(meta.roomId, meta.userId, msg.id))
+        sharedKey, JSON.stringify(encodePayload(msg)), messageAad(meta.roomId, meta.userId, msg.id))
       const { error: e } = await supabase.from('messages').insert({
         id: msg.id, room_id: meta.roomId, sender_id: meta.userId, ciphertext, nonce,
       })
@@ -249,16 +306,39 @@ export function useRoom() {
     }
   }, [upsert])
 
-  const send = useCallback(async (text) => {
-    const clean = text.trim().slice(0, MAX_LEN)
-    if (!clean || keyChanged || !c.current.sharedKey) return
+  const sendFields = useCallback(async (fields, id = crypto.randomUUID()) => {
+    if (keyChanged || !c.current.sharedKey) return
     // strictly increasing, so two quick sends can never tie and swap order
     const ts = Math.max(Date.now(), (c.current.lastTs ?? 0) + 1)
     c.current.lastTs = ts
-    const msg = { id: crypto.randomUUID(), from: 'me', text: clean, ts, delivered: false, failed: false }
+    const msg = { id, from: 'me', ts, delivered: false, failed: false, ...fields }
     upsert(msg)
     await deliver(msg)
   }, [deliver, upsert, keyChanged])
+
+  const send = useCallback(async (text) => {
+    const clean = text.trim().slice(0, MAX_LEN)
+    if (!clean) return
+    await sendFields({ kind: 'text', text: clean })
+  }, [sendFields])
+
+  // Returns an error message, or '' when the file was queued.
+  const sendMedia = useCallback(async (blob, kind, { dur = 0, caption = '' } = {}) => {
+    const mime = baseMime(blob.type)
+    if (blob.size < 1) return 'That file is empty.'
+    if (blob.size > MAX_MEDIA_BYTES) return `That file is too big. The limit is ${MAX_MEDIA_BYTES / 1024 / 1024} MB.`
+    const media = { kind, mime, size: blob.size, dur }
+    try { decodePayload({ k: 'media', ts: Date.now(), m: media }, Date.now()) } catch { return 'That file type is not supported.' }
+    if (keyChanged || !c.current.sharedKey) return 'Sending is turned off.'
+    const id = crypto.randomUUID()
+    try { await saveMedia(c.current.meta.roomId, id, new Uint8Array(await blob.arrayBuffer())) } catch { return 'Could not read that file.' }
+    await sendFields({ kind: 'media', text: caption.trim().slice(0, MAX_LEN), media }, id)
+    return ''
+  }, [sendFields, keyChanged])
+
+  const sendDeck = useCallback((deck) => sendFields({ kind: 'deck', deck }), [sendFields])
+  const sendPlay = useCallback((play) => sendFields({ kind: 'play', play }), [sendFields])
+  const getMedia = useCallback((m) => loadMedia(c.current.meta.roomId, m.id, m.media.mime), [])
 
   const retry = useCallback((id) => {
     const m = c.current.msgs.find((x) => x.id === id)
@@ -267,16 +347,19 @@ export function useRoom() {
 
   const reset = useCallback(async () => {
     try {
-      if (c.current.meta?.roomId) await supabase.rpc('close_room', { p_room: c.current.meta.roomId })
+      if (c.current.meta?.roomId) {
+        await cleanServerMedia(c.current.meta.roomId, { all: true })
+        await supabase.rpc('close_room', { p_room: c.current.meta.roomId })
+      }
       await supabase?.auth.signOut()
     } catch { /* best effort: local wipe below is what matters */ }
     if (c.current.channel) supabase?.removeChannel(c.current.channel)
     await wipeDevice()
-    c.current = { seen: new Set(), sending: new Set(), msgs: [], channel: null, ticking: false }
+    c.current = { seen: new Set(), inflight: new Set(), sending: new Set(), msgs: [], channel: null, ticking: false }
     setMessages([]); setSafety(null); setVerified(false); setKeyChanged(false); setCode(''); setError(''); setClosedReason('')
     setPhase('setup')
   }, [])
 
   return { phase, error, busy, code, safety, verified, keyChanged, closedReason, messages, online,
-    create, join, markVerified, send, retry, reset }
+    create, join, markVerified, send, sendMedia, sendDeck, sendPlay, getMedia, retry, reset }
 }

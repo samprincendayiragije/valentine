@@ -22,6 +22,15 @@ put someone in danger, and do not treat it as a replacement for Signal.
 - **No tracking.** No analytics, no third-party scripts, fonts or trackers. A strict Content-Security-Policy
   only allows the app's own files and your Supabase project.
 
+## Photos, videos and voice notes
+
+Files are encrypted in the browser before upload with the room's message key and stored as opaque bytes. The server
+can see that a file exists, its approximate size and when it was uploaded, but not its type or content (the type is
+inside the encrypted message). The recipient's phone deletes the file from the server after saving it, and the app
+removes anything left after 7 days or when the room is deleted. Received photos and videos are blurred until tapped.
+Once received, the other person can save or screenshot anything you send. Local copies are encrypted at rest on each
+phone with a non-extractable key.
+
 ## What the server (and hosting) can see
 
 The server cannot read your messages, but it does know:
