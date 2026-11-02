@@ -42,6 +42,14 @@ Facebook, the logged-in account if there is one) can see the video was opened an
 app's address. The tag is chosen by the sender and cannot be verified; each person can hide any item from their own
 feed.
 
+## Discover (YouTube search)
+
+When someone opens Reels -> Discover, their phone asks Google's YouTube search API for videos matching the chosen tag
+and loads thumbnails from i.ytimg.com. Google therefore sees the search words, the key and that phone's IP address.
+Nothing is sent when Discover is closed. Results are not reviewed by us: requests use embeddable-only (which excludes
+age-restricted videos), moderate SafeSearch and exclusion words for minors-related terms, but a search can still
+return things you would rather not see. Anything you share goes into the encrypted feed like a pasted link.
+
 ## What the server (and hosting) can see
 
 The server cannot read your messages, but it does know:

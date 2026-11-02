@@ -3,6 +3,7 @@ import { ExternalLink, EyeOff, Play, Plus } from 'lucide-react'
 import { TAGS, parseVideoUrl, DIRECT_HOSTS } from '../lib/embed.js'
 import { kvGet, kvSet } from '../lib/store.js'
 import { Gate } from './Games.jsx'
+import Discover from './Discover.jsx'
 
 const NAMES = { youtube: 'YouTube', vimeo: 'Vimeo', facebook: 'Facebook', file: 'Video file' }
 
@@ -54,6 +55,7 @@ export default function Reels({ messages, sendWatch, disabled }) {
   const [url, setUrl] = useState('')
   const [tag, setTag] = useState('Romantic')
   const [err, setErr] = useState('')
+  const [mode, setMode] = useState('feed')   // feed | discover
 
   useEffect(() => {
     kvGet('gamesAck').then((v) => setAck(Boolean(v))).catch(() => setAck(false))
@@ -83,8 +85,22 @@ export default function Reels({ messages, sendWatch, disabled }) {
     } catch (e) { setErr(e.message) }
   }
 
+  const modes = (
+    <div className="grid grid-cols-2 gap-1 px-3 pt-2 text-xs" role="tablist" aria-label="Reels mode">
+      {[['feed', 'Our feed'], ['discover', 'Discover']].map(([id, label]) => (
+        <button key={id} role="tab" aria-selected={mode === id} onClick={() => setMode(id)}
+          className={`rounded-full py-1.5 ${mode === id ? 'bg-white/15' : 'text-slate-400'}`}>{label}</button>
+      ))}
+    </div>
+  )
+
+  if (mode === 'discover') {
+    return <div className="flex min-h-0 flex-1 flex-col">{modes}<Discover sendWatch={sendWatch} disabled={disabled} /></div>
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {modes}
       <div className="flex items-center gap-2 overflow-x-auto px-3 py-2">
         {['All', ...TAGS].map((t) => (
           <button key={t} onClick={() => setFilter(t)} className={`shrink-0 rounded-full px-3 py-1 text-xs ${filter === t ? 'bg-pink-600' : 'bg-slate-800 text-slate-300'}`}>{t}</button>

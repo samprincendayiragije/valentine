@@ -53,6 +53,21 @@ reel link (or a direct .mp4 from a site in `DIRECT_HOSTS` in `src/lib/embed.js`)
 of you. To allow another video-file site, add it to `DIRECT_HOSTS` and to `media-src` in `index.html` and
 `vite.config.js`; `npm test` checks they match.
 
+## Discover setup (optional)
+
+*Reels -> Discover* is an endless swipe-up feed of YouTube videos for each tag (Kissing, Romantic, Flirty, ASMR,
+Spicy), with one-tap *Share to our feed*. It uses YouTube's official search API (Facebook has no search API, so
+Facebook reels still need a pasted link). To switch it on:
+
+1. Google Cloud Console: create a project, enable **YouTube Data API v3**, create an **API key**.
+2. Restrict the key: *Application restrictions -> Websites*, add `https://<user>.github.io/*`; *API restrictions ->*
+   YouTube Data API v3 only. (A restricted key is safe to ship in the page; it only works from your site.)
+3. GitHub repo -> *Settings -> Secrets and variables -> Actions -> Variables*: add `VITE_YOUTUBE_API_KEY`.
+4. Make sure the build step in `.github/workflows/deploy.yml` has
+   `VITE_YOUTUBE_API_KEY: ${{ vars.VITE_YOUTUBE_API_KEY }}` under `env:`, then re-run the workflow.
+
+The free quota is about 100 searches a day, shared by both of you.
+
 ## Develop
 
 ```bash

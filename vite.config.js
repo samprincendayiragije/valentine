@@ -13,7 +13,7 @@ const devCsp = {
   apply: 'serve',
   transformIndexHtml: (html) =>
     html.replace(/(<meta\s+http-equiv="Content-Security-Policy"\s+content=")[^"]*(")/,
-      `$1default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: https://archive.org https://*.archive.org; frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://www.facebook.com; connect-src 'self' ws: http: https://*.supabase.co wss://*.supabase.co$2`),
+      `$1default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ytimg.com; media-src 'self' blob: https://archive.org https://*.archive.org; frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://www.facebook.com; connect-src 'self' ws: http: https://www.googleapis.com https://*.supabase.co wss://*.supabase.co$2`),
 }
 
 export default defineConfig({
